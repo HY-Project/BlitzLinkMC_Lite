@@ -1,0 +1,164 @@
+# BlitzLink Lite jars: ONE mod file for NeoForge + Fabric (build/libs/blitzlink-lite-<version>+mc26.3.jar, plus
+# BlitzLink-Lite-HAE-<version>+mc26.3.jar, the Human Art Edition with the hand-drawn icon) and the Bukkit plugin. No
+# sidecar executable: the tunnel runs in the JVM with webrtc-java, whose libwebrtc for Windows/Linux/macOS x64/arm64
+# comes from Maven Central and is packed into each jar.
+name: build
+
+on:
+  push:
+    # One branch per Minecraft version (mc-26.3, ...); the default branch is the latest stable one.
+    branches: ['mc-*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One build per branch; a newer push to the same pull request cancels the older run.
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  jars:
+    name: jars (universal mod + HAE + bukkit)
+    runs-on: ubuntu-26.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+
+      # The repository's data/net.json is a placeholder (blitzlink.example.com). Official builds use the same
+      # BLITZLINK_NET_JSON as native BlitzLink, so Lite and native players share the relay.
+      - name: Network config
+        env:
+          NET_JSON: ${{ vars.BLITZLINK_NET_JSON }}
+        run: |
+          if [ -n "$NET_JSON" ]; then
+            printf '%s\n' "$NET_JSON" > data/net.json
+            echo "data/net.json: official network config from BLITZLINK_NET_JSON"
+          else
+            echo "::warning::BLITZLINK_NET_JSON is not set, building with the placeholder data/net.json"
+          fi
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - uses: gradle/actions/setup-gradle@v5
+
+      # Unit tests, Lite↔Lite WebRTC e2e (direct UDP and TURN), both mod jars and the Bukkit plugin.
+      - name: Build
+        run: ./gradlew build --stacktrace
+
+      # Every libwebrtc build in every jar, no executable anywhere, and the two editions differ only in the icon.
+      - name: Jar contents
+        run: |
+          test "$(ls build/libs/blitzlink-lite-*+mc*.jar build/libs/BlitzLink-Lite-HAE-*+mc*.jar | wc -l)" -eq 2
+          for jar in build/libs/blitzlink-lite-*+mc*.jar build/libs/BlitzLink-Lite-HAE-*+mc*.jar bukkit/build/libs/blitzlink-lite-bukkit-*.jar; do
+            echo "== $jar ($(du -h "$jar" | cut -f1))"
+            unzip -Z1 "$jar" | grep -E '\.(dll|so|dylib)$'
+            test "$(unzip -Z1 "$jar" | grep -cE '\.(dll|so|dylib)$')" -eq 6
+            if unzip -Z1 "$jar" | grep -iE '\.exe$|^module-info\.class$'; then echo "::error::$jar has an executable or a module descriptor"; exit 1; fi
+            unzip -Z1 "$jar" | grep -E 'com/hyproj/blitzlink/lite/LiteTunnel.class|META-INF/licenses/webrtc-java/LICENSE'
+          done
+          for jar in build/libs/*.jar; do unzip -Z1 "$jar" | grep -E 'META-INF/neoforge.mods.toml|fabric.mod.json'; done
+          diff <(unzip -Z1 build/libs/blitzlink-lite-*+mc26.3.jar | sort) <(unzip -Z1 build/libs/BlitzLink-Lite-HAE-*+mc26.3.jar | sort)
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: blitzlink-lite
+          path: |
+            build/libs/blitzlink-lite-*.jar
+            build/libs/BlitzLink-Lite-HAE-*.jar
+            bukkit/build/libs/blitzlink-lite-bukkit-*.jar
+          if-no-files-found: error
+
+  # Dedicated-server images rarely have X11/GLib/GBM, which libwebrtc links against; HeadlessLinux stands in for them.
+  # The e2e tests run in a bare JDK container on both Linux architectures to prove it.
+  headless:
+    name: headless linux-${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: x64,   runner: ubuntu-26.04 }
+          - { arch: arm64, runner: ubuntu-26.04-arm }
+    container: eclipse-temurin:25-jdk
+    steps:
+      - uses: actions/checkout@v5
+      - name: No desktop libraries here
+        run: |
+          if ls /usr/lib/*/libX11.so.6 /usr/lib/libX11.so.6 2>/dev/null; then echo "::error::the image has libX11"; exit 1; fi
+      - name: Tunnel tests
+        run: ./gradlew :tunnel:test --tests '*TunnelE2eTest' --tests '*CodecTest' --stacktrace
+
+  # The tunnel on the other desktop platforms the jar ships for.
+  platforms:
+    name: tunnel ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: windows-x64,   runner: windows-2025-vs2026 }
+          - { name: windows-arm64, runner: windows-11-vs2026-arm }
+          - { name: macos-arm64,   runner: macos-latest }
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v5
+      - name: Tunnel tests
+        shell: bash
+        run: ./gradlew :tunnel:test --tests '*TunnelE2eTest' --tests '*CodecTest' --stacktrace
+
+  # Lite ↔ native BlitzLink: native host + Lite join and Lite host + native join, direct UDP and TURN, through the real
+  # blitzlink-relay — built from the native repository's default branch (HY-Project/BlitzLinkMC, public).
+  interop:
+    name: interop with native BlitzLink
+    runs-on: ubuntu-26.04
+    timeout-minutes: 60
+    env:
+      RUST_VERSION: '1.99.0'
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/checkout@v5
+        with:
+          repository: HY-Project/BlitzLinkMC
+          path: native-src
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: native-src/native -> target
+          save-if: ${{ github.event_name != 'pull_request' && github.ref_name == github.event.repository.default_branch }}
+
+      - name: Native relay and sidecar
+        working-directory: native-src/native
+        run: cargo build --release --locked -p blitzlink-relay -p blitzlink-tunnel
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - uses: gradle/actions/setup-gradle@v5
+
+      - name: Interop tests
+        run: ./gradlew :tunnel:test --tests '*InteropTest' -Pblitzlink.native.dir=native-src/native/target/release --stacktrace
+
+      - name: Every interop case ran
+        run: |
+          f=tunnel/build/test-results/test/TEST-com.hyproj.blitzlink.lite.InteropTest.xml
+          grep -o 'tests="[0-9]*" skipped="[0-9]*" failures="[0-9]*"' "$f"
+          grep -q 'tests="5" skipped="0" failures="0"' "$f"

@@ -1,0 +1,16 @@
+name: BlitzLink
+version: '${version}'
+main: com.hyproj.blitzlink.bukkit.BlitzLinkPlugin
+api-version: '26.3'
+description: Relay Minecraft servers with a MCJE- join code. Game data flows peer-to-peer over WebRTC.
+author: HY Project(hyjys)
+website: https://hyproj.com
+commands:
+  blitzlink:
+    description: Show the BlitzLink join code, toggle the public listing, or request a new code.
+    usage: /blitzlink [code|public on|public off|regen]
+    permission: blitzlink.admin
+permissions:
+  blitzlink.admin:
+    description: Use /blitzlink.
+    default: op

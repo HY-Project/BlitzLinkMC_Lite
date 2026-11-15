@@ -1,0 +1,29 @@
+// Conventions for loader subprojects: compile common's sources and resources into the loader jar. The Lite tunnel
+// (`tunnel`, with webrtc-java) is a library on the dev runtime classpath; the universal jar packs it (root build.gradle).
+plugins {
+    id 'blitzlink-common'
+}
+
+configurations {
+    commonJava { canBeResolved = true }
+    commonResources { canBeResolved = true }
+}
+
+dependencies {
+    compileOnly project(':common')
+    compileOnly project(':tunnel')
+    commonJava project(path: ':common', configuration: 'commonJava')
+    commonResources project(path: ':common', configuration: 'commonResources')
+}
+
+tasks.named('compileJava', JavaCompile) {
+    dependsOn(configurations.commonJava)
+    source(configurations.commonJava)
+}
+
+processResources {
+    dependsOn(configurations.commonResources)
+    from(configurations.commonResources)
+    // Shared network constants (relay URL, STUN) — native BlitzLink's Rust sidecar reads the same file.
+    from(rootProject.file('data')) { include 'net.json'; into 'blitzlink' }
+}

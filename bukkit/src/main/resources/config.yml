@@ -1,0 +1,23 @@
+# BlitzLink for Bukkit-family servers (Spigot, Paper, Purpur, ...).
+# The hyproj.com relay only passes one WebRTC offer/answer pair and the public list; game data flows directly
+# between players and this server.
+
+# Register with the relay when the server starts.
+enabled: true
+# Signalling relay URL (empty = the one built into this jar; a build without one needs this set).
+relay: ''
+# STUN servers, e.g. ['stun:relay.example.org:3478'] (empty = the ones built into this jar).
+stun: []
+# Show this server in the public BlitzLink list.
+public: false
+# Name in the public list (empty = first line of the MOTD).
+listing-name: ''
+# Ask the router to forward the game port (UDP + TCP) with UPnP.
+upnp: true
+# Embedded TURN over TCP for players on networks that block UDP. Bukkit can't share the game port with it, so it
+# listens on its own TCP port (0 = game port + 1, -1 = off). Forward this port too if the server is behind NAT.
+turn-port: 0
+# Send the player's real address to the server with the PROXY protocol (v2). Only turn this on together with
+# Paper's `proxies.proxy-protocol: true` (config/paper-global.yml) — otherwise every connection fails.
+# When off, tunnelled players appear as 127.0.0.1 in logs and IP bans.
+proxy-protocol: false

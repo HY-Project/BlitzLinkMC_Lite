@@ -1,0 +1,37 @@
+// BlitzLink Lite tunnel engine: the pure-Java replacement for native BlitzLink's Rust sidecar (blitzlink-tunnel).
+// Same JSON events and control messages (docs/en/PROTOCOL.md), same relay protocol and P2P channels, so Lite and
+// native hosts/joiners mix freely. WebRTC comes from webrtc-java (libwebrtc over JNI); everything else is plain Java.
+// Loader-free: compiled once and packed into the mod jar and the Bukkit plugin.
+plugins {
+    id 'blitzlink-common'
+}
+
+dependencies {
+    // Minecraft and Bukkit both ship Gson.
+    compileOnly "com.google.code.gson:gson:${gson_version}"
+    api "dev.onvoid.webrtc:webrtc-java:${webrtc_java_version}"
+
+    testImplementation "com.google.code.gson:gson:${gson_version}"
+    testRuntimeOnly "dev.onvoid.webrtc:webrtc-java:${webrtc_java_version}:${rootProject.webrtcClassifier()}"
+}
+
+
+tasks.named('test', Test) {
+    // e2e tests open real WebRTC connections over loopback/LAN.
+    timeout = java.time.Duration.ofMinutes(10)
+    // InteropTest: -Pblitzlink.native.dir=<dir with native BlitzLink's blitzlink-relay and blitzlink-tunnel>
+    if (project.hasProperty('blitzlink.native.dir')) {
+        systemProperty 'blitzlink.native.dir', rootProject.file(project.property('blitzlink.native.dir')).absolutePath
+    }
+    // BenchTest: -Pbench (with -Pblitzlink.native.dir)
+    if (project.hasProperty('bench')) {
+        systemProperty 'blitzlink.bench', 'true'
+        ['blitzlink.bench.mb', 'blitzlink.bench.combos'].each { if (project.hasProperty(it)) systemProperty it, project.property(it) }
+    }
+    systemProperty 'webrtc.java.extract.dir', layout.buildDirectory.dir('webrtc-natives').get().asFile.absolutePath
+    testLogging {
+        events 'failed', 'skipped'
+        exceptionFormat 'full'
+        showStandardStreams = project.hasProperty('verboseTests')
+    }
+}

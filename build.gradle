@@ -1,0 +1,116 @@
+plugins {
+    // https://projects.neoforged.net/neoforged/moddevgradle
+    id 'net.neoforged.moddev' version '2.0.148' apply false
+    // https://fabricmc.net/develop — 26.x is unobfuscated, so the non-remapping Loom plugin.
+    id 'net.fabricmc.fabric-loom' version "${loom_version}" apply false
+}
+
+// ---- libwebrtc (webrtc-java) for the Lite tunnel ----
+// Native BlitzLink ships a Rust sidecar executable per platform; Lite ships none. Its tunnel (tunnel/) runs in the JVM
+// and gets WebRTC from webrtc-java: the Java classes plus libwebrtc as a JNI library for every platform below, all packed
+// into the one mod jar (and the Bukkit plugin). libwebrtc is loaded with System.load — no process is ever started.
+def webrtcPlatforms = ['windows-x86_64', 'windows-aarch64', 'linux-x86_64', 'linux-aarch64', 'macos-x86_64', 'macos-aarch64']
+
+// The libwebrtc build for this machine (tunnel tests and dev runs).
+ext.webrtcClassifier = {
+    def os = System.getProperty('os.name').toLowerCase()
+    def arch = System.getProperty('os.arch') in ['aarch64', 'arm64'] ? 'aarch64' : 'x86_64'
+    return (os.contains('win') ? 'windows' : os.contains('mac') ? 'macos' : 'linux') + '-' + arch
+}
+
+configurations {
+    webrtcApi { canBeResolved = true; transitive = false }
+    webrtcNatives { canBeResolved = true; transitive = false }
+}
+
+dependencies {
+    webrtcApi "dev.onvoid.webrtc:webrtc-java:${webrtc_java_version}"
+    webrtcPlatforms.each { webrtcNatives "dev.onvoid.webrtc:webrtc-java:${webrtc_java_version}:${it}" }
+}
+
+repositories {
+    mavenCentral()
+}
+
+// webrtc-java's classes and libraries as they go into a jar: classes keep their package (JNI binds to those names, so no
+// relocation), its module descriptor and manifest stay out (the mod jar is one module), its licences move under
+// META-INF/licenses/webrtc-java/.
+ext.webrtcInto = { AbstractArchiveTask jar ->
+    jar.from({ configurations.webrtcApi.collect { zipTree(it) } }) {
+        exclude 'META-INF/MANIFEST.MF', 'META-INF/versions/**', 'module-info.class', 'META-INF/LICENSE*', 'META-INF/NOTICE*', 'META-INF/licenses/**', 'META-INF/maven/**'
+    }
+    jar.from({ configurations.webrtcNatives.collect { zipTree(it) } }) {
+        include '*.dll', '*.so', '*.dylib'
+    }
+    jar.from({ zipTree(configurations.webrtcNatives.first()) }) {
+        include 'META-INF/LICENSE', 'META-INF/NOTICE', 'META-INF/licenses/**'
+        eachFile { it.path = it.path.replaceFirst('^META-INF/(licenses/)?', 'META-INF/licenses/webrtc-java/') }
+        includeEmptyDirs = false
+    }
+}
+
+// ---- ONE mod file for NeoForge and Fabric ----
+// Common code compiled against vanilla (the `common` project), the Lite tunnel engine (`tunnel`), each loader's own
+// package (com/hyproj/blitzlink/{neoforge,fabric}), both loader manifests, fonts/lang, net.json and webrtc-java with
+// libwebrtc for every platform. Platform.get() picks the loader at runtime, so neither loader ever links the other's classes.
+//
+// Two editions of that jar, identical apart from the mod icon (assets/blitzlink/icon.png):
+//   universalJar  blitzlink-lite-<version>+mc<mc>.jar       GitHub releases and CurseForge (the default edition)
+//   haeJar        BlitzLink-Lite-HAE-<version>+mc<mc>.jar   BlitzLink Lite HAE (Human Art Edition), for Modrinth: hand-drawn
+//                                                          icon (branding/modrinth/), since Modrinth does not allow AI-generated art
+def modJarContents = { Jar jar, File iconOverride ->
+    jar.group = 'build'
+    jar.destinationDirectory = layout.buildDirectory.dir('libs')
+    jar.duplicatesStrategy = DuplicatesStrategy.FAIL
+
+    jar.dependsOn ':tunnel:classes', ':common:classes', ':neoforge:classes', ':neoforge:generateModMetadata', ':fabric:classes', ':fabric:processResources'
+
+    jar.from(project(':tunnel').layout.buildDirectory.dir('classes/java/main'))
+    jar.from(project(':common').layout.buildDirectory.dir('classes/java/main'))
+    jar.from(project(':common').layout.buildDirectory.dir('resources/main')) {
+        if (iconOverride != null) exclude 'assets/blitzlink/icon.png'
+    }
+    if (iconOverride != null) {
+        jar.inputs.file(iconOverride)
+        jar.from(iconOverride) { into 'assets/blitzlink'; rename { 'icon.png' } }
+    }
+    jar.from(project(':neoforge').layout.buildDirectory.dir('classes/java/main')) { include 'com/hyproj/blitzlink/neoforge/**' }
+    jar.from(project(':neoforge').layout.buildDirectory.dir('generated/sources/modMetadata')) { include 'META-INF/neoforge.mods.toml' }
+    jar.from(project(':fabric').layout.buildDirectory.dir('resources/main')) { include 'fabric.mod.json' }
+    jar.from(project(':fabric').layout.buildDirectory.dir('classes/java/main')) { include 'com/hyproj/blitzlink/fabric/**' }
+    jar.from(file('data')) { include 'net.json'; into 'blitzlink' }
+    webrtcInto(jar)
+    jar.from(file('docs/license')) { into 'META-INF/licenses' }
+    jar.from(file('LICENSE')) { into 'META-INF' }
+    jar.from(file('NOTICE')) { into 'META-INF' }
+
+    jar.manifest {
+        attributes([
+                'Specification-Title'   : mod_name,
+                'Specification-Vendor'  : mod_author,
+                'Specification-Version' : mod_version,
+                'Implementation-Title'  : mod_name,
+                'Implementation-Version': mod_version,
+                'Implementation-Vendor' : mod_author,
+                'Built-On-Minecraft'    : minecraft_version
+        ])
+    }
+}
+
+tasks.register('universalJar', Jar) {
+    description = 'Builds the single BlitzLink Lite mod jar for NeoForge and Fabric (GitHub / CurseForge edition).'
+    archiveFileName = "blitzlink-lite-${mod_version}+mc${minecraft_version}.jar"
+    modJarContents(it, null)
+}
+
+tasks.register('haeJar', Jar) {
+    description = 'Builds BlitzLink Lite HAE (Human Art Edition), the Modrinth jar: same contents, hand-drawn mod icon.'
+    archiveFileName = "BlitzLink-Lite-HAE-${mod_version}+mc${minecraft_version}.jar"
+    modJarContents(it, file('branding/modrinth/blitzlink-lite-icon-hand-drawn-512.png'))
+}
+
+// `gradlew build` also produces both editions of the mod jar and the Bukkit plugin, and runs the unit and tunnel tests.
+tasks.register('build') {
+    group = 'build'
+    dependsOn 'universalJar', 'haeJar', ':bukkit:build', ':common:test', ':tunnel:test'
+}

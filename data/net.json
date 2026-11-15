@@ -1,0 +1,5 @@
+{
+  "_comment": "Placeholder network config. Official builds replace this file in CI from the BLITZLINK_NET_JSON repository variable. Builds made from this file have no relay configured: pass --relay / -Dblitzlink.relay, or put your own relay here.",
+  "relay": "https://blitzlink.example.com/relay/mcje",
+  "stun": ["stun:blitzlink.example.com:3478"]
+}

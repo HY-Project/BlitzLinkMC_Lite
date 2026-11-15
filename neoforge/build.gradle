@@ -1,0 +1,99 @@
+plugins {
+    id 'blitzlink-loader'
+    id 'net.neoforged.moddev'
+}
+
+neoForge {
+    version = neo_version
+    def at = rootProject.file('common/src/main/resources/META-INF/accesstransformer.cfg')
+    if (at.exists()) {
+        accessTransformers.from(at.absolutePath)
+    }
+
+    runs {
+        configureEach {
+            logLevel = org.slf4j.event.Level.DEBUG
+            // Dev builds may point at a local relay: gradlew :neoforge:runClient -Pblitzlink.relay=http://127.0.0.1:1947
+            if (project.hasProperty('blitzlink.relay')) {
+                systemProperty 'blitzlink.relay', project.property('blitzlink.relay')
+            }
+            if (project.hasProperty('blitzlink.stun')) {
+                systemProperty 'blitzlink.stun', project.property('blitzlink.stun')
+            }
+            systemProperty 'blitzlink.dev', 'true'
+            // gradlew :neoforge:runClient -Pblitzlink.devScreen=browser|host|import|join:MCJE-XXXX
+            if (project.hasProperty('blitzlink.devScreen')) {
+                systemProperty 'blitzlink.devScreen', project.property('blitzlink.devScreen')
+            }
+        }
+        client {
+            client()
+            gameDirectory = file('runs/client')
+        }
+        client2 {
+            client()
+            gameDirectory = file('runs/client2')
+            programArguments.addAll '--username', 'Dev2'
+        }
+        // The universal jar exactly as players get it (runs/clientjar/mods), without the project's own classes:
+        // gradlew :neoforge:runClientJar
+        clientJar {
+            client()
+            gameDirectory = file('runs/clientjar')
+            loadedMods = []
+        }
+        server {
+            server()
+            gameDirectory = file('runs/server')
+            programArgument '--nogui'
+        }
+    }
+
+    mods {
+        "${mod_id}" {
+            sourceSet sourceSets.main
+        }
+    }
+}
+
+// Dev runs: the Lite tunnel and webrtc-java (with libwebrtc for this machine) next to the game; the universal jar packs them.
+dependencies {
+    implementation project(':tunnel')
+    runtimeOnly "dev.onvoid.webrtc:webrtc-java:${webrtc_java_version}:${rootProject.webrtcClassifier()}"
+}
+
+sourceSets.main.resources {
+    srcDir 'src/generated/resources'
+    exclude '**/.cache'
+}
+
+// neoforge.mods.toml is a template (expanded with gradle.properties values).
+var generateModMetadata = tasks.register('generateModMetadata', ProcessResources) {
+    var replaceProperties = [
+            minecraft_version_range      : minecraft_version_range,
+            neo_version                  : neo_version,
+            neoforge_loader_version_range: neoforge_loader_version_range,
+            mod_id                       : mod_id,
+            mod_name                     : mod_name,
+            mod_license                  : mod_license,
+            mod_version                  : mod_version,
+            mod_author                   : mod_author,
+            mod_description              : mod_description,
+    ]
+    inputs.properties replaceProperties
+    expand replaceProperties
+    from 'src/main/templates'
+    into 'build/generated/sources/modMetadata'
+}
+sourceSets.main.resources.srcDir generateModMetadata
+neoForge.ideSyncTask generateModMetadata
+
+tasks.matching { it.name == 'runClientJar' }.configureEach {
+    dependsOn rootProject.tasks.named('universalJar')
+    doFirst {
+        def mods = file('runs/clientjar/mods')
+        mods.mkdirs()
+        project.delete(fileTree(mods) { include 'blitzlink-*.jar' })
+        project.copy { from rootProject.tasks.named('universalJar'); into mods }
+    }
+}

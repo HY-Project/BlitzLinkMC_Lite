@@ -1,0 +1,54 @@
+plugins {
+    id 'blitzlink-loader'
+    id 'net.fabricmc.fabric-loom'
+}
+
+loom {
+    mods {
+        "${mod_id}" {
+            sourceSet sourceSets.main
+        }
+    }
+    runs {
+        configureEach {
+            if (project.hasProperty('blitzlink.relay')) {
+                vmArg "-Dblitzlink.relay=${project.property('blitzlink.relay')}"
+            }
+            if (project.hasProperty('blitzlink.stun')) {
+                vmArg "-Dblitzlink.stun=${project.property('blitzlink.stun')}"
+            }
+            vmArg '-Dblitzlink.dev=true'
+            if (project.hasProperty('blitzlink.devScreen')) {
+                vmArg "-Dblitzlink.devScreen=${project.property('blitzlink.devScreen')}"
+            }
+        }
+        client {
+            runDir 'runs/client'
+        }
+        server {
+            runDir 'runs/server'
+        }
+    }
+}
+
+dependencies {
+    minecraft "com.mojang:minecraft:${minecraft_version}"
+    implementation "net.fabricmc:fabric-loader:${fabric_loader_version}"
+    implementation "net.fabricmc.fabric-api:fabric-api:${fabric_api_version}"
+    // Dev runs: the Lite tunnel and libwebrtc for this machine (the universal jar packs every platform).
+    implementation project(':tunnel')
+    runtimeOnly "dev.onvoid.webrtc:webrtc-java:${webrtc_java_version}:${rootProject.webrtcClassifier()}"
+}
+
+// The universal jar exactly as players get it, in a real Fabric production launch (plus Fabric API):
+// gradlew :fabric:runClientJar
+tasks.register('runClientJar', net.fabricmc.loom.task.prod.ClientProductionRunTask) {
+    // setFrom: replace Loom's default (this project's loader-only jar) with exactly the jars players install.
+    def api = configurations.detachedConfiguration(dependencies.create("net.fabricmc.fabric-api:fabric-api:${fabric_api_version}")).setTransitive(false)
+    if (project.hasProperty('withoutBlitzLink')) {
+        mods.setFrom(api)
+    } else {
+        mods.setFrom(rootProject.tasks.named('universalJar'), api)
+    }
+    runDir = file('runs/clientjar')
+}

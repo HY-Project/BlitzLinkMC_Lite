@@ -1,0 +1,37 @@
+// BlitzLink Lite for Bukkit-family servers (Spigot, Paper, Purpur, …): the Lite tunnel host (tunnel/, webrtc-java) inside
+// the server, plugin list sent over the P2P meta channel like the mod list. Compiles against the plain Bukkit/Spigot API only.
+plugins {
+    id 'blitzlink-common'
+}
+
+repositories {
+    maven { name = 'Spigot'; url = 'https://hub.spigotmc.org/nexus/content/repositories/snapshots/' }
+    maven { name = 'SpigotPublic'; url = 'https://hub.spigotmc.org/nexus/content/groups/public/' }
+    maven { name = 'Sonatype'; url = 'https://oss.sonatype.org/content/repositories/snapshots/' }
+    maven { name = 'Minecraft'; url = 'https://libraries.minecraft.net/' }
+}
+
+dependencies {
+    compileOnly "org.spigotmc:spigot-api:${spigot_api_version}"
+    compileOnly project(':tunnel')
+}
+
+base {
+    archivesName = "blitzlink-lite-bukkit-${minecraft_version}"
+}
+
+// The plugin jar carries the tunnel classes and webrtc-java with libwebrtc for every platform (rootProject.webrtcInto).
+jar {
+    dependsOn ':tunnel:classes'
+    duplicatesStrategy = DuplicatesStrategy.FAIL
+    from(project(':tunnel').layout.buildDirectory.dir('classes/java/main'))
+    rootProject.webrtcInto(it)
+}
+
+processResources {
+    inputs.property('version', mod_version)
+    filesMatching('plugin.yml') { expand version: mod_version }
+    from(rootProject.file('data')) { include 'net.json'; into 'blitzlink' }
+    from(rootProject.file('LICENSE')) { into 'META-INF' }
+    from(rootProject.file('NOTICE')) { into 'META-INF' }
+}

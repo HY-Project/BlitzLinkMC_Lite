@@ -1,0 +1,13 @@
+.gradle/
+build/
+out/
+bin/
+.idea/
+*.iml
+.vscode/
+runs/
+run/
+native/target/
+**/src/generated/**/.cache/
+/natives/
+/blitzlink-template-*.zip

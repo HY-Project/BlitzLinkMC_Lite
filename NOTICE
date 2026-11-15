@@ -1,0 +1,11 @@
+BlitzLink Lite
+Copyright 2026 HY Project
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+Bundled fonts are licensed separately under the SIL Open Font License 1.1;
+their license texts are in docs/license/.
+
+The mod jar and the Bukkit plugin bundle webrtc-java (https://github.com/devopvoid/webrtc-java,
+Apache License 2.0) and its build of the WebRTC library (libwebrtc, BSD 3-Clause, with the
+WebRTC patent grant). Their license texts ship in the jars under META-INF/licenses/webrtc-java/.
