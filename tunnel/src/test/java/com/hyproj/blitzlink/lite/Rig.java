@@ -141,7 +141,7 @@ final class Rig {
                 while (!ss.isClosed()) {
                     try {
                         Socket s = ss.accept();
-                        Thread.ofVirtual().start(() -> handle(s));
+                        Thread.ofPlatform().daemon().start(() -> handle(s));
                     } catch (IOException e) {
                         return;
                     }
@@ -162,7 +162,8 @@ final class Rig {
                 if ((first & 0xFC) == 0 && turnPort > 0) {
                     try (Socket t = new Socket(InetAddress.getLoopbackAddress(), turnPort)) {
                         t.getOutputStream().write(first);
-                        Thread a = Thread.ofVirtual().start(() -> copy(in, sOut(t)));
+                        // Platform threads: a virtual-thread pipe stalled under load on Windows (see Host.ASYNC).
+                        Thread a = Thread.ofPlatform().daemon().start(() -> copy(in, sOut(t)));
                         copy(t.getInputStream(), out);
                         a.join();
                     }

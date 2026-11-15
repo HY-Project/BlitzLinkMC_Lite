@@ -237,7 +237,7 @@ final class Join implements LiteTunnel.Engine {
             JsonObject t = Json.obj("status");
             t.addProperty("state", "turn");
             out.emit(t);
-            Thread.ofVirtual().name("blitzlink-join-turn").start(() -> {
+            Thread.ofPlatform().daemon().name("blitzlink-join-turn").start(() -> {
                 try {
                     Attempt a = new Attempt("turn", new Rtc.Peer(factory, Rtc.config(List.of(Rtc.turnServer(turnInfo)), true)));
                     synchronized (attempts) {
@@ -494,7 +494,7 @@ final class Join implements LiteTunnel.Engine {
             l.addProperty("port", listener.getLocalPort());
             out.emit(l);
             ServerSocket ss = listener;
-            Thread.ofVirtual().name("blitzlink-join-accept").start(() -> {
+            Thread.ofPlatform().daemon().name("blitzlink-join-accept").start(() -> {
                 while (!ss.isClosed()) {
                     try {
                         Socket s = ss.accept();

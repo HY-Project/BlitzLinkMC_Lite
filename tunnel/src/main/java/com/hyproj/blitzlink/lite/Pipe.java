@@ -65,8 +65,8 @@ final class Pipe {
             s.setTcpNoDelay(true);
         } catch (IOException ignored) {
         }
-        Thread.ofVirtual().name("blitzlink-" + channel.label + "-w").start(() -> writer(s, beforeFirstWrite));
-        Thread.ofVirtual().name("blitzlink-" + channel.label + "-r").start(() -> reader(s));
+        Thread.ofPlatform().daemon().name("blitzlink-" + channel.label + "-w").start(() -> writer(s, beforeFirstWrite));
+        Thread.ofPlatform().daemon().name("blitzlink-" + channel.label + "-r").start(() -> reader(s));
     }
 
     private void writer(Socket s, Runnable beforeFirstWrite) {

@@ -63,11 +63,11 @@ final class TurnServer implements AutoCloseable {
             throw new IOException("TURN " + Wire.addr(bind) + ": cannot bind (" + e.getMessage() + ")", e);
         }
         listener = ss;
-        Thread.ofVirtual().name("blitzlink-turn-accept").start(() -> {
+        Thread.ofPlatform().daemon().name("blitzlink-turn-accept").start(() -> {
             while (!ss.isClosed()) {
                 try {
                     Socket s = ss.accept();
-                    Thread.ofVirtual().name("blitzlink-turn").start(() -> serve(s));
+                    Thread.ofPlatform().daemon().name("blitzlink-turn").start(() -> serve(s));
                 } catch (IOException e) {
                     if (ss.isClosed()) return;
                 }
@@ -262,7 +262,7 @@ final class TurnServer implements AutoCloseable {
                 }
                 holder[0] = na;
                 sources.put(na.relay.getLocalPort(), tcpPeer);
-                Thread.ofVirtual().name("blitzlink-turn-relay").start(() -> relayIn(na, out, writeLock));
+                Thread.ofPlatform().daemon().name("blitzlink-turn-relay").start(() -> relayIn(na, out, writeLock));
                 InetAddress local = s.getLocalAddress();
                 InetAddress shown = local.isLoopbackAddress() && lan != null ? lan : local;
                 InetSocketAddress relayed = new InetSocketAddress(shown, na.relay.getLocalPort());

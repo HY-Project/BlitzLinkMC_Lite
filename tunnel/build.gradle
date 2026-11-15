@@ -26,7 +26,7 @@ tasks.named('test', Test) {
     // BenchTest: -Pbench (with -Pblitzlink.native.dir)
     if (project.hasProperty('bench')) {
         systemProperty 'blitzlink.bench', 'true'
-        ['blitzlink.bench.mb', 'blitzlink.bench.combos'].each { if (project.hasProperty(it)) systemProperty it, project.property(it) }
+        ['blitzlink.bench.mb', 'blitzlink.bench.combos', 'blitzlink.bench.turnListen'].each { if (project.hasProperty(it)) systemProperty it, project.property(it) }
     }
     systemProperty 'webrtc.java.extract.dir', layout.buildDirectory.dir('webrtc-natives').get().asFile.absolutePath
     testLogging {

@@ -47,19 +47,21 @@ that switches editions keeps its host key, fingerprint and join code.
 | Platforms | Windows, Linux (x64, arm64) | Windows, Linux **and macOS** (x64, arm64) |
 | Headless Linux servers | nothing needed | works, using stand-ins for the X11/GLib/GBM libraries libwebrtc links against (`HeadlessLinux`) |
 
-Throughput, measured on one Windows 11 laptop over loopback (64 MB echoed through host → join; `BenchTest`). This is CPU cost
-only: over the internet your connection is the limit, not the tunnel.
+Throughput, measured on one Windows 11 laptop over loopback (64 MB echoed through host → join, two runs each; `BenchTest`,
+native BlitzLink 26.3.1). This is CPU cost only: over the internet your connection is the limit, not the tunnel.
 
 | Host → join | Direct UDP | TURN (TCP) |
 |---|---|---|
-| native → native | 5.9 MB/s | aborted after 34 MB |
-| Lite → Lite | 11.9 MB/s | 8.1 MB/s |
-| native host → Lite join | 20.3 MB/s | 11.0 MB/s |
-| Lite host → native join | 10.5 MB/s | aborted after 5 MB |
+| native → native | 5.0–9.7 MB/s | 4.3–4.7 MB/s |
+| Lite → Lite | 12.8–13.8 MB/s | 8.7–8.8 MB/s |
+| native host → Lite join | 15.9–20.1 MB/s | 9.9–13.6 MB/s |
+| Lite host → native join | 6.0–12.5 MB/s | 5.5–6.0 MB/s |
 
 So Lite does not lose raw throughput: libwebrtc's SCTP outruns str0m here. Its costs are the ones in the table above: memory
 and CPU inside the game process, the bigger download, no isolation from crashes, and no fixed UDP port.
-(The aborted runs both have a native joiner on TURN: that is native BlitzLink's TURN client, not Lite.)
+
+Native BlitzLink 26.3.1 or newer is recommended next to Lite: older native hosts were dropped by the relay every 75 s when their
+player count did not change (Lite hosts never were).
 
 ## Screenshots
 

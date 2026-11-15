@@ -66,6 +66,8 @@ class BenchTest {
         Path dir = Rig.tempDir("bench");
         try (Rig.EchoServer echo = new Rig.EchoServer()) {
             List<String> args = Rig.hostArgs(echo.port(), url, dir);
+            // -Pblitzlink.bench.turnListen: TURN on its own port (as on Bukkit) instead of piped from the game port.
+            if (Boolean.getBoolean("blitzlink.bench.turnListen")) args.addAll(List.of("--turn-listen", "0.0.0.0:0"));
             try (Rig.Side host = nativeHost ? Rig.nativeSide(exe(bin, "blitzlink-tunnel"), "host", args, dir) : Rig.lite("host", args, dir)) {
                 host.send("listing", Rig.wrap("listing", Rig.listing("Bench")));
                 host.send("meta", Rig.wrap("info", new JsonObject()));

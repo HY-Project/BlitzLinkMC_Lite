@@ -59,7 +59,16 @@ final class Host implements LiteTunnel.Engine {
     private static final long STUN_EVERY_MS = 300_000;
     private static final long STUN_RETRY_MS = 5_000;
     private static final long GATHER_MS = 1_500;
-    static final Executor ASYNC = Executors.newVirtualThreadPerTaskExecutor();
+    /**
+     * Short blocking jobs (dialing the server, closing PeerConnections). Platform threads on purpose, like every socket
+     * thread here: with virtual threads, a socket read and a write on the same TCP connection stalled each other on Windows
+     * under load (the TURN path froze until ICE gave up).
+     */
+    static final Executor ASYNC = Executors.newCachedThreadPool(r -> {
+        Thread t = new Thread(r, "blitzlink-async");
+        t.setDaemon(true);
+        return t;
+    });
 
     private final Options opt;
     private final LiteTunnel.Emitter out;
@@ -160,8 +169,8 @@ final class Host implements LiteTunnel.Engine {
             turnPort = opt.turnListen() != null ? port : opt.port();
         }
 
-        Thread.ofVirtual().name("blitzlink-relay-link").start(this::relayLink);
-        if (opt.upnp()) Thread.ofVirtual().name("blitzlink-upnp").start(this::upnp);
+        Thread.ofPlatform().daemon().name("blitzlink-relay-link").start(this::relayLink);
+        if (opt.upnp()) Thread.ofPlatform().daemon().name("blitzlink-upnp").start(this::upnp);
         brain.scheduleWithFixedDelay(this::tick, 500, 500, TimeUnit.MILLISECONDS);
         if (!stunServers.isEmpty()) scheduleStun(publicAddr != null ? STUN_EVERY_MS : STUN_RETRY_MS);
         try {
